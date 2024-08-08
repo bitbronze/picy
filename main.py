@@ -8,8 +8,9 @@ class ExtendedRequestHandlerClass(BaseHTTPRequestHandler):
         print(f"New connection from {self.client_address}")
         self.send_response(200)
         self.end_headers()
+        self.wfile.write(b"<html><head></head><body>OK!</body></html>")
 
 
 
-server = ThreadingHTTPServer(("0.0.0.0", 8000), ExtendedRequestHandlerClass)
+server = ThreadingHTTPServer(("0.0.0.0", 80), ExtendedRequestHandlerClass)
 server.serve_forever()
