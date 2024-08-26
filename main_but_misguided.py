@@ -1,4 +1,4 @@
-from socketserver import ThreadingTCPServer, BaseRequestHandler
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import base64, time
 
 
@@ -30,40 +30,20 @@ def authenticate_client(username, password):
 
 
 
-class ExtendedBaseRequestHandler(BaseRequestHandler):
+class ExtendedBaseHTTPRequestHandlerClass(BaseHTTPRequestHandler):
 
 
-    def handle(self):
+    def do_PUT(self):
 
 
         print("")
 
 
         # New client has connected.
-        print(f"New connection from {self.client_address}.")
-        time.sleep(0.1)
-
-        # Read the first chunk of the request sent by the new client.
-        recv_data = self.request.recv(1024).strip()
-
-        # HTTP parsing
-        http_request = recv_data.decode('utf-8')
-        print(http_request)
-        http_request_line_list = http_request.split('\n')
-
-        request_banner = http_request_line_list[0]
-
-        http_verb = request_banner.split(" ")[0]
-        mountpoint = request_banner.split(" ")[1]
-
-        print(http_verb)
-        print(mountpoint)
-        
 
 
-        return
-
-
+        # At this point we have no idea what he is or what he wants to do.
+        print(f"New PUT/Producer connection from {self.client_address}. Mountpoint recognised as {self.path}")
         print("Headers: ")
         print(self.headers)
 
@@ -92,7 +72,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
         # Respond with good words to soften the heart (purse) of the client
         self.send_response(100)
-        self.send_header("Server", "Picy 0.0.1")
+        self.send_header("Server", "Icecast 2.5.0")
         self.end_headers()
         time.sleep(1)
 
@@ -103,7 +83,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
 
 
-server = ThreadingTCPServer(("0.0.0.0", 80), ExtendedBaseRequestHandler)
+server = ThreadingHTTPServer(("0.0.0.0", 80), ExtendedBaseHTTPRequestHandlerClass)
 print("Starting server...")
 server.serve_forever()
     
