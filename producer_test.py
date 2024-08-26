@@ -18,7 +18,7 @@ custom_headers = {
     "ice-description"   : "We play cool music only. We are based in the UK.",
     "ice-genre"         : "Pop",
     "Content-Type"      : "audio/mp3",
-    #"Expect"            : "100-continue"
+    "Expect"            : "100-continue"
 }
 
 
@@ -40,7 +40,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
     sock.sendall(b'PUT /song.mp3 HTTP/1.1\n')
     sock.sendall(b'Host: 127.0.0.1:80\n')
     sock.sendall(b'Authorization: Basic YWRtaW46cGFzcw==\n')
-    sock.sendall(b'User-Agent: picy-test-stream_producer\n')
+    sock.sendall(b'User-Agent: picy-test-stream-producer\n')
 
     for header in custom_headers:
         sock.sendall(bytes(f'{header}: {custom_headers[header]}\n', 'utf-8'))

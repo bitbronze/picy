@@ -3,34 +3,89 @@ import base64, time
 
 
 
-mountpoint_db = []
-
-
-
-def parse_username_password_from_header_value(header_value):
-    username_pass_base64 = header_value.split(' ')[1]
-    username_pass_bytes = base64.b64decode(bytes(username_pass_base64, 'utf-8'))
-    username_pass_list = username_pass_bytes.decode('utf-8').split(':')
-    username = username_pass_list[0]
-    password = username_pass_list[1]
-
-    print(f"Client supplied the following credentials: username={username}, password={password}")
-
-    return username, password
-    
-
-
-def authenticate_client(username, password):
-    # IDK what to implement here but rest assured this function is a placeholder
-
-    if username == 'admin' and password == 'pass':
-        return True
-    else :
-        return False
+mountpoint_db = {}
 
 
 
 class ExtendedBaseRequestHandler(BaseRequestHandler):
+
+    def send_401(self):
+        self.request.sendall(b'HTTP/1.1 401 Unauthorized\n')
+
+    
+
+    def parse_username_password_from_header_value(self, header_value):
+        username_pass_base64 = header_value.split(' ')[1]
+        username_pass_bytes = base64.b64decode(bytes(username_pass_base64, 'utf-8'))
+        username_pass_list = username_pass_bytes.decode('utf-8').split(':')
+        username = username_pass_list[0]
+        password = username_pass_list[1]
+
+        print(f"Client supplied the following credentials: username={username}, password={password}")
+
+        return username, password
+        
+
+
+    def authenticate_client(self, username, password):
+        # Not sure what to implement here but this is a placeholder
+
+        if username == 'admin' and password == 'pass':
+            return True
+        else :
+            return False
+
+
+
+    def headers_to_dict(self, http_request_line_list):
+
+        headers_dict = {}
+
+        for line in http_request_line_list[1:]:
+            line_split = line.split(":")
+            headers_dict[line_split[0].strip()] = line_split[1].strip()
+
+        return headers_dict
+
+
+
+    def producer_loop(self, http_request_line_list, mountpoint):
+
+        headers_dict = self.headers_to_dict(http_request_line_list)
+
+        print("Headers: ")
+        print(headers_dict)
+
+        # First thing we should probably do is to verify the Authorization header to authenticate the client
+        username, password = self.parse_username_password_from_header_value(headers_dict['Authorization'])
+        auth_passed = self.authenticate_client(username, password)
+
+        if not auth_passed:
+            print("Producer failed authentication")
+            self.send_401()
+            return
+        else:
+            print("Producer passed authentication")
+
+
+        # We will load relavent data form the request into our list of active mountpoints and their data.
+        mountpoint_db[mountpoint] = {
+            "ice-name" : headers_dict['ice-name'],
+            "ice-description" : headers_dict['ice-description']
+        }
+
+
+        # Do PUT / PRODUCER processing:
+
+
+
+
+        #mountpoint_db.remove(mountpoint)
+
+
+    def consumer_loop(self, http_request_line_list, mountpoint):
+        return self.send_401()
+
 
 
     def handle(self):
@@ -41,9 +96,9 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
         # New client has connected.
         print(f"New connection from {self.client_address}.")
-        time.sleep(0.1)
 
         # Read the first chunk of the request sent by the new client.
+        time.sleep(0.1)
         recv_data = self.request.recv(1024).strip()
 
         # HTTP parsing
@@ -51,54 +106,20 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
         print(http_request)
         http_request_line_list = http_request.split('\n')
 
-        request_banner = http_request_line_list[0]
-
-        http_verb = request_banner.split(" ")[0]
-        mountpoint = request_banner.split(" ")[1]
+        request_banner = http_request_line_list[0]          # PUT /song.mp3 HTTP/1.1
+        http_verb      = request_banner.split(" ")[0]       # PUT
+        mountpoint     = request_banner.split(" ")[1]       # /song.mp3
 
         print(http_verb)
-        print(mountpoint)
+        if http_verb == "PUT":
+            print("Client is a producer?")
+            self.producer_loop(http_request_line_list, mountpoint)
+
+        if http_verb == "GET":
+            print("Client is a consumer?")
+            self.consumer_loop(http_request_line_list, mountpoint)        
         
 
-
-        return
-
-
-        print("Headers: ")
-        print(self.headers)
-
-
-        # First thing we should probably do is to verify the Authorization header to authenticate the client
-        username, password = parse_username_password_from_header_value(self.headers['Authorization'])
-        auth_passed = authenticate_client(username, password)
-
-        if not auth_passed:
-            print("Producer failed authentication")
-            self.send_response(401)
-            self.end_headers()
-            return
-        else:
-            print("Producer passed authentication")
-
-
-        # We will load relavent data form the request into our list of active mountpoints and their data.
-        mountpoint_data = {
-            "mountpoint" : self.path,
-            "ice-name" : self.headers['ice-name'],
-            "ice-description" : self.headers['ice-description']
-        }
-        mountpoint_db.append(mountpoint_data)
-
-
-        # Respond with good words to soften the heart (purse) of the client
-        self.send_response(100)
-        self.send_header("Server", "Picy 0.0.1")
-        self.end_headers()
-        time.sleep(1)
-
-
-
-        mountpoint_db.remove(mountpoint_data)
         print("")
 
 
