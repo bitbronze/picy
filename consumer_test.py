@@ -37,23 +37,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 
     sock.connect((target_host, target_port))
 
-    sock.sendall(b'PUT /song.mp3 HTTP/1.1\n')
+    sock.sendall(b'GET /song.mp3 HTTP/1.1\n')
     sock.sendall(b'Host: 127.0.0.1:80\n')
-    sock.sendall(b'Authorization: Basic YWRtaW46cGFzcw==\n')
-    sock.sendall(b'User-Agent: picy-test-stream-producer\n')
+    sock.sendall(b'User-Agent: picy-test-stream-consumer\n')
 
-    for header in custom_headers:
-        sock.sendall(bytes(f'{header}: {custom_headers[header]}\n', 'utf-8'))
+    while True:
+        response = sock.recv(1024)
+        if response == b'':
+            print("server disconnected?")
+            break
+        print('Received', repr(response))
 
-    initial_response = sock.recv(1024)
-    print('Received', repr(initial_response))
-
-    with open('song.mp3', 'rb') as songfile:
-        while True:
-            sock.sendall(songfile.read(2048))
-            print("sent song")
-            time.sleep(0.1)
-
+    
 
 
 

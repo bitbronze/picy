@@ -68,23 +68,51 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
             print("Producer passed authentication")
 
 
-        # We will load relavent data form the request into our list of active mountpoints and their data.
+        # We will load relavent data form the request into our dict of active mountpoints and their data.
         mountpoint_db[mountpoint] = {
             "ice-name" : headers_dict['ice-name'],
-            "ice-description" : headers_dict['ice-description']
+            "ice-description" : headers_dict['ice-description'],
+            "stream_data" : bytearray([]),
+            "stream_data_sequence_number" : 0
         }
 
 
         # Do PUT / PRODUCER processing:
+        self.request.sendall(b'HTTP/1.1 100 Continue\n')
+        self.request.sendall(b'Server: Picy 0.0.1\n')
 
-
-
+        try:
+            while True:
+                data = self.request.recv(4096)
+                if data == b'':
+                    print("Producer disconnected?")
+                    break
+                mountpoint_db[mountpoint]['stream_data'] = data
+                mountpoint_db[mountpoint]['stream_data_sequence_number'] += 1
+                print(mountpoint_db[mountpoint]['stream_data_sequence_number'])
+        except Exception as e:
+            print(e)
 
         #mountpoint_db.remove(mountpoint)
 
 
     def consumer_loop(self, http_request_line_list, mountpoint):
-        return self.send_401()
+
+        if mountpoint in mountpoint_db:
+
+            self.request.sendall(b"HTTP/1.1 200 OK\n")
+            self.request.sendall(b"Content-Type: audio/mpeg\n")
+            self.request.sendall(b"Ice-Audio-Info: ice-samplerate=48000;ice-bitrate=320;ice-channels=2\n")
+            self.request.sendall(b"Ice-Bitrate: 320\n")
+            self.request.sendall(b"Connection: keep-alive\n")
+            self.request.sendall(b"Access-Control-Allow-Origin: *\n\n")
+
+
+            curr_seq_num = mountpoint_db[mountpoint]['stream_data_sequence_number']
+            while True:
+                if not curr_seq_num == mountpoint_db[mountpoint]['stream_data_sequence_number']:
+                    curr_seq_num = mountpoint_db[mountpoint]['stream_data_sequence_number']
+                    self.request.sendall(mountpoint_db[mountpoint]['stream_data'])
 
 
 
