@@ -127,8 +127,8 @@ class RingBuffer:
         """
         with self.lock.for_write():
             writer_position = self.writer.get()
-            if writer_position.counter > 0:
-                raise MustCreatedReadersBeforeWritingError
+            # if writer_position.counter > 0:
+            #     raise MustCreatedReadersBeforeWritingError
 
             reader = Pointer(self.slot_count, start=writer_position.counter)
             self.readers.append(reader)

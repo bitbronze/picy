@@ -1,6 +1,6 @@
 from socketserver import ThreadingTCPServer, BaseRequestHandler
 import base64, time
-
+import ringbuffer
 
 
 mountpoint_db = {}
@@ -74,8 +74,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
         mountpoint_db[mountpoint] = {
             "ice-name" : headers_dict['ice-name'] if ('ice-name' in headers_dict) else "Unknown",
             "ice-description" : headers_dict['ice-description'] if ('ice-description' in headers_dict) else "Unknown",
-            "stream_data" : bytearray([]),
-            "stream_data_sequence_number" : 0
+            "ringbuffer" : ringbuffer.RingBuffer(slot_bytes=1024, slot_count=1024)
         }
 
         print(mountpoint_db)
@@ -84,18 +83,23 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
         self.request.sendall(b'HTTP/1.1 100 Continue\n\n')
         self.request.sendall(b'Server: Picy 0.0.1\n')
 
+        ring_buffer : ringbuffer.RingBuffer = mountpoint_db[mountpoint]['ringbuffer']
+        ring_buffer.new_writer()
+
         try:
             while True:
-                data = self.request.recv(4096)
+                data = self.request.recv(1024)
+                
                 if data == b'':
                     print("Producer disconnected?")
                     break
-                mountpoint_db[mountpoint]['stream_data'] = data
-                mountpoint_db[mountpoint]['stream_data_sequence_number'] += 1
-                #print(mountpoint_db[mountpoint]['stream_data_sequence_number'])
+                
+                ring_buffer.try_write(data)
+                
         except Exception as e:
             print(e)
 
+        ring_buffer.writer_done()
         #mountpoint_db.remove(mountpoint)
 
 
@@ -109,13 +113,16 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
             self.request.sendall(b"Ice-Bitrate: 320\n")
             self.request.sendall(b"Connection: keep-alive\n")
             self.request.sendall(b"Access-Control-Allow-Origin: *\n\n")
-
-
-            curr_seq_num = mountpoint_db[mountpoint]['stream_data_sequence_number']
+        
+            ring_buffer : ringbuffer.RingBuffer = mountpoint_db[mountpoint]['ringbuffer']
+            pointer = ring_buffer.new_reader()    
+            
             while True:
-                if not curr_seq_num == mountpoint_db[mountpoint]['stream_data_sequence_number']:
-                    curr_seq_num = mountpoint_db[mountpoint]['stream_data_sequence_number']
-                    self.request.sendall(mountpoint_db[mountpoint]['stream_data'])
+                try :
+                    data = ring_buffer.try_read(pointer)
+                except ringbuffer.WaitingForWriterError:
+                    continue
+                self.request.sendall(data)
 
 
 
