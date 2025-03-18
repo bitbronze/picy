@@ -1,5 +1,11 @@
 Include/
 Lib/
 Scripts/
+
+code_snippets/
+tests/ffmpeg.exe
+tests/ffplay.exe
+tests/song.mp3
+
 pyvenv.cfg
 notes.txt

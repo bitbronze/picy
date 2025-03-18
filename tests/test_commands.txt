@@ -1,0 +1,3 @@
+ffmpeg.exe -loglevel debug -re -i song.mp3 -c:a copy icecast://admin:pass@127.0.0.1/mountpoint1.mp3
+
+ffplay.exe http://127.0.0.1/mountpoint1.mp3

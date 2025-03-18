@@ -9,10 +9,12 @@ mountpoint_db = {}
 
 class ExtendedBaseRequestHandler(BaseRequestHandler):
 
-    def send_401(self):
-        self.request.sendall(b'HTTP/1.1 401 Unauthorized\n')
 
-    
+
+    def send_401(self):
+        self.request.sendall(b'HTTP/1.1 401 Unauthorized\n\n')
+
+
 
     def parse_username_password_from_header_value(self, header_value):
         username_pass_base64 = header_value.split(' ')[1]
@@ -70,15 +72,17 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
         # We will load relavent data form the request into our dict of active mountpoints and their data.
         mountpoint_db[mountpoint] = {
-            "ice-name" : headers_dict['ice-name'],
-            "ice-description" : headers_dict['ice-description'],
+            #"ice-name" : headers_dict['ice-name'],
+            #"ice-description" : headers_dict['ice-description'],
             "stream_data" : bytearray([]),
             "stream_data_sequence_number" : 0
         }
 
+        # self.request.close()
+        # return
 
         # Do PUT / PRODUCER processing:
-        self.request.sendall(b'HTTP/1.1 100 Continue\n')
+        self.request.sendall(b'HTTP/1.1 100 Continue\n\n')
         self.request.sendall(b'Server: Picy 0.0.1\n')
 
         try:
@@ -100,7 +104,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
         if mountpoint in mountpoint_db:
 
-            self.request.sendall(b"HTTP/1.1 200 OK\n")
+            self.request.sendall(b"HTTP/1.1 200 OK\n\n")
             self.request.sendall(b"Content-Type: audio/mpeg\n")
             self.request.sendall(b"Ice-Audio-Info: ice-samplerate=48000;ice-bitrate=320;ice-channels=2\n")
             self.request.sendall(b"Ice-Bitrate: 320\n")
