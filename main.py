@@ -70,16 +70,15 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
             print("Producer passed authentication")
 
 
-        # We will load relavent data form the request into our dict of active mountpoints and their data.
+        # We will load relevant data from the request into our dict of active mountpoints and their data.
         mountpoint_db[mountpoint] = {
-            #"ice-name" : headers_dict['ice-name'],
-            #"ice-description" : headers_dict['ice-description'],
+            "ice-name" : headers_dict['ice-name'] if ('ice-name' in headers_dict) else "Unknown",
+            "ice-description" : headers_dict['ice-description'] if ('ice-description' in headers_dict) else "Unknown",
             "stream_data" : bytearray([]),
             "stream_data_sequence_number" : 0
         }
 
-        # self.request.close()
-        # return
+        print(mountpoint_db)
 
         # Do PUT / PRODUCER processing:
         self.request.sendall(b'HTTP/1.1 100 Continue\n\n')
@@ -93,7 +92,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
                     break
                 mountpoint_db[mountpoint]['stream_data'] = data
                 mountpoint_db[mountpoint]['stream_data_sequence_number'] += 1
-                print(mountpoint_db[mountpoint]['stream_data_sequence_number'])
+                #print(mountpoint_db[mountpoint]['stream_data_sequence_number'])
         except Exception as e:
             print(e)
 
@@ -156,7 +155,12 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
 
 
-server = ThreadingTCPServer(("0.0.0.0", 80), ExtendedBaseRequestHandler)
-print("Starting server...")
-server.serve_forever()
-    
+def main():
+    server = ThreadingTCPServer(("0.0.0.0", 80), ExtendedBaseRequestHandler)
+    print("Starting server...")
+    server.serve_forever()
+
+
+
+if __name__ == "__main__":
+    main()
