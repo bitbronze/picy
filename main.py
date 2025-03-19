@@ -74,7 +74,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
         mountpoint_db[mountpoint] = {
             "ice-name" : headers_dict['ice-name'] if ('ice-name' in headers_dict) else "Unknown",
             "ice-description" : headers_dict['ice-description'] if ('ice-description' in headers_dict) else "Unknown",
-            "ringbuffer" : ringbuffer.RingBuffer(slot_bytes=20480, slot_count=10)
+            "ringbuffer" : ringbuffer.RingBuffer(slot_bytes=2048, slot_count=100)
         }
 
         print(mountpoint_db)
@@ -95,8 +95,8 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
             def myreceive():
                 chunks = []
                 bytes_recd = 0
-                while bytes_recd < 20480:
-                    chunk = self.request.recv(min(20480 - bytes_recd, 2048))
+                while bytes_recd < 2048:
+                    chunk = self.request.recv(min(2048 - bytes_recd, 2048))
                     if chunk == b'':
                         raise RuntimeError("socket connection broken")
                     chunks.append(chunk)
@@ -113,7 +113,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
             
             try:
                 ring_buffer.try_write(data)
-                print(f'producer slot {ring_buffer.writer.position.index} generation {ring_buffer.writer.position.generation}')
+                print(f'producer index {ring_buffer.writer.position.index} generation {ring_buffer.writer.position.generation}')
             except ringbuffer.WaitingForReaderError:
                 ring_buffer.force_reader_sync()
                 print("were syncing, were syncing")
@@ -149,7 +149,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
                     except ringbuffer.WaitingForWriterError:
                         print("WaitingForWriterError")
                         continue
-                    print(f'consumer counter {pointer.position.index} generation {pointer.position.generation}')
+                    print(f'consumer index {pointer.position.index} generation {pointer.position.generation}')
                     self.request.sendall(data)
             
             except Exception as e:
