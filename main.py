@@ -74,32 +74,51 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
         mountpoint_db[mountpoint] = {
             "ice-name" : headers_dict['ice-name'] if ('ice-name' in headers_dict) else "Unknown",
             "ice-description" : headers_dict['ice-description'] if ('ice-description' in headers_dict) else "Unknown",
-            "ringbuffer" : ringbuffer.RingBuffer(slot_bytes=1024, slot_count=1024)
+            "ringbuffer" : ringbuffer.RingBuffer(slot_bytes=20480, slot_count=10)
         }
 
         print(mountpoint_db)
 
         # Do PUT / PRODUCER processing:
-        self.request.sendall(b'HTTP/1.1 100 Continue\n\n')
-        self.request.sendall(b'Server: Picy 0.0.1\n')
+        self.request.sendall(b'HTTP/1.1 100 Continue\r\n')
+        self.request.sendall(b'Server: Picy 0.0.1\r\n')
+        self.request.sendall(b"\r\n")
 
         ring_buffer : ringbuffer.RingBuffer = mountpoint_db[mountpoint]['ringbuffer']
         ring_buffer.new_writer()
 
-        try:
-            while True:
-                data = self.request.recv(1024)
-                
-                if data == b'':
-                    print("Producer disconnected?")
-                    break
-                
-                ring_buffer.try_write(data)
-                
-        except Exception as e:
-            print(e)
 
-        ring_buffer.writer_done()
+        while True:
+
+            #data = self.request.recv(32768)
+
+            def myreceive():
+                chunks = []
+                bytes_recd = 0
+                while bytes_recd < 20480:
+                    chunk = self.request.recv(min(20480 - bytes_recd, 2048))
+                    if chunk == b'':
+                        raise RuntimeError("socket connection broken")
+                    chunks.append(chunk)
+                    bytes_recd = bytes_recd + len(chunk)
+                return b''.join(chunks)
+            
+
+            data = myreceive()
+
+
+            if data == b'':
+                print("Producer disconnected?")
+                break
+            
+            try:
+                ring_buffer.try_write(data)
+                print(f'producer slot {ring_buffer.writer.position.index} generation {ring_buffer.writer.position.generation}')
+            except ringbuffer.WaitingForReaderError:
+                ring_buffer.force_reader_sync()
+                print("were syncing, were syncing")
+
+        #ring_buffer.writer_done()
         #mountpoint_db.remove(mountpoint)
 
 
@@ -107,22 +126,38 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
         if mountpoint in mountpoint_db:
 
-            self.request.sendall(b"HTTP/1.1 200 OK\n\n")
-            self.request.sendall(b"Content-Type: audio/mpeg\n")
-            self.request.sendall(b"Ice-Audio-Info: ice-samplerate=48000;ice-bitrate=320;ice-channels=2\n")
-            self.request.sendall(b"Ice-Bitrate: 320\n")
-            self.request.sendall(b"Connection: keep-alive\n")
-            self.request.sendall(b"Access-Control-Allow-Origin: *\n\n")
-        
-            ring_buffer : ringbuffer.RingBuffer = mountpoint_db[mountpoint]['ringbuffer']
-            pointer = ring_buffer.new_reader()    
+            try:
             
-            while True:
-                try :
-                    data = ring_buffer.try_read(pointer)
-                except ringbuffer.WaitingForWriterError:
-                    continue
-                self.request.sendall(data)
+                self.request.sendall(b"HTTP/1.1 200 OK\r\n")
+                self.request.sendall(b"Content-Type: audio/mp3\r\n")
+                # self.request.sendall(b"Content-Disposition: inline\r\n")
+                # self.request.sendall(b"Ice-Audio-Info: ice-samplerate=48000;ice-bitrate=320;ice-channels=2\r\n")
+                # self.request.sendall(b"Ice-Bitrate: 320\r\n")
+                # self.request.sendall(b"Connection: keep-alive\r\n")
+                # self.request.sendall(b"Access-Control-Allow-Origin: *\r\n")
+                # self.request.sendall(b"Cache-Control: no-cache, no-store\r\n")
+                self.request.sendall(b"\r\n")
+                
+
+            
+                ring_buffer : ringbuffer.RingBuffer = mountpoint_db[mountpoint]['ringbuffer']
+                pointer = ring_buffer.new_reader()
+
+                while True:
+                    try :
+                        data = ring_buffer.blocking_read(pointer)
+                    except ringbuffer.WaitingForWriterError:
+                        print("WaitingForWriterError")
+                        continue
+                    print(f'consumer counter {pointer.position.index} generation {pointer.position.generation}')
+                    self.request.sendall(data)
+            
+            except Exception as e:
+                print(repr(e))
+                print("Removing reader")
+                ring_buffer.readers.remove(pointer)
+
+            
 
 
 
