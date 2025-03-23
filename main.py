@@ -1,4 +1,5 @@
 from socketserver import ThreadingTCPServer, BaseRequestHandler
+import logging
 import base64, time
 import ringbuffer
 
@@ -11,8 +12,9 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
 
 
-    def send_401(self):
-        self.request.sendall(b'HTTP/1.1 401 Unauthorized\n\n')
+    def error_out(self):
+        self.request.sendall(b'HTTP/1.1 401 Unauthorized\r\n')
+        self.request.sendall(b'\r\n')
 
 
 
@@ -51,12 +53,12 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
 
 
-    def producer_loop(self, http_request_line_list, mountpoint):
+    def producer_flow(self, http_request_line_list, mountpoint):
 
         headers_dict = self.headers_to_dict(http_request_line_list)
 
-        print("Headers: ")
-        print(headers_dict)
+        #print("Headers: ")
+        #print(headers_dict)
 
         # First thing we should probably do is to verify the Authorization header to authenticate the client
         username, password = self.parse_username_password_from_header_value(headers_dict['Authorization'])
@@ -64,7 +66,7 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
         if not auth_passed:
             print("Producer failed authentication")
-            self.send_401()
+            self.error_out()
             return
         else:
             print("Producer passed authentication")
@@ -72,12 +74,12 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
 
         # We will load relevant data from the request into our dict of active mountpoints and their data.
         mountpoint_db[mountpoint] = {
-            "ice-name" : headers_dict['ice-name'] if ('ice-name' in headers_dict) else "Unknown",
+            "ice-name" :        headers_dict['ice-name']        if ('ice-name' in headers_dict)        else "Unknown",
             "ice-description" : headers_dict['ice-description'] if ('ice-description' in headers_dict) else "Unknown",
             "ringbuffer" : ringbuffer.RingBuffer(slot_bytes=2048, slot_count=100)
         }
 
-        print(mountpoint_db)
+        #print(mountpoint_db)
 
         # Do PUT / PRODUCER processing:
         self.request.sendall(b'HTTP/1.1 100 Continue\r\n')
@@ -122,12 +124,12 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
         #mountpoint_db.remove(mountpoint)
 
 
-    def consumer_loop(self, http_request_line_list, mountpoint):
+    def consumer_flow(self, http_request_line_list, mountpoint):
 
         if mountpoint in mountpoint_db:
 
             try:
-            
+
                 self.request.sendall(b"HTTP/1.1 200 OK\r\n")
                 self.request.sendall(b"Content-Type: audio/mp3\r\n")
                 # self.request.sendall(b"Content-Disposition: inline\r\n")
@@ -138,8 +140,6 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
                 # self.request.sendall(b"Cache-Control: no-cache, no-store\r\n")
                 self.request.sendall(b"\r\n")
                 
-
-            
                 ring_buffer : ringbuffer.RingBuffer = mountpoint_db[mountpoint]['ringbuffer']
                 pointer = ring_buffer.new_reader()
 
@@ -155,45 +155,45 @@ class ExtendedBaseRequestHandler(BaseRequestHandler):
             except Exception as e:
                 print(repr(e))
                 print("Removing reader")
+                # This operation is very important as orphaned readers cause the whole stream 
+                # to resync and glitch every time the writer wraps around to the dead reader.
                 ring_buffer.readers.remove(pointer)
-
             
-
+        else: # when mountpoint is not recognised
+            return self.error_out()
+            
 
 
     def handle(self):
 
-
-        print("")
-
-
         # New client has connected.
-        print(f"New connection from {self.client_address}.")
+        print(f"New connection from {self.client_address}")
 
         # Read the first chunk of the request sent by the new client.
         time.sleep(0.1)
-        recv_data = self.request.recv(1024).strip()
+        recv_data : bytearray = self.request.recv(1024).strip()
 
-        # HTTP parsing
+        # Check if the data contains out magic values
+        if (not recv_data[:3] == b'PUT') and (not recv_data[:3] == b'GET'):
+            return self.error_out()
+        
+        # Convert http request to list of lines for parsing
         http_request = recv_data.decode('utf-8')
-        print(http_request)
+        #print(http_request)
         http_request_line_list = http_request.split('\n')
 
-        request_banner = http_request_line_list[0]          # PUT /song.mp3 HTTP/1.1
-        http_verb      = request_banner.split(" ")[0]       # PUT
+        # Detect parameters for streaming including action and mountpoint
+        request_banner = http_request_line_list[0]          # PUT /song.mp3 HTTP/1.1 (or) GET /song.mp3 HTTP/1.1
+        http_verb      = request_banner.split(" ")[0]       # PUT (or) GET
         mountpoint     = request_banner.split(" ")[1]       # /song.mp3
 
-        print(http_verb)
         if http_verb == "PUT":
-            print("Client is a producer?")
-            self.producer_loop(http_request_line_list, mountpoint)
+            print("Connecting client wants to be producer")
+            self.producer_flow(http_request_line_list, mountpoint)
 
         if http_verb == "GET":
-            print("Client is a consumer?")
-            self.consumer_loop(http_request_line_list, mountpoint)        
-        
-
-        print("")
+            print("Connecting client wants to be consumer")
+            self.consumer_flow(http_request_line_list, mountpoint)
 
 
 
